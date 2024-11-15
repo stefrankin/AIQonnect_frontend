@@ -5,6 +5,7 @@ import HeroCarousel from '@/components/HeroCarousel'
 const Home = () => {
   return (
     <>
+    <div className="bg-black-200"></div>
       <section className="px-6 md: px-20 py-24">
         <div className="flex max-xl:flex-col gap-16">
           <div className="flex flex-col justify-center">
