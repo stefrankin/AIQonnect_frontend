@@ -1,0 +1,26 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		// {
+		// 	"type": "node",
+		// 	"request": "launch",
+		// 	"name": "Debug Next.js Server (API)",
+		// 	"runtimeExecutable": "npx",
+		// 	"runtimeArgs": ["next", "dev"],
+		// 	"port": 9229,
+		// 	"cwd": "${workspaceFolder}",
+		// 	"env": {
+		// 		"NODE_ENV": "development"
+		// 	},
+		// 	"skipFiles": ["<node_internals>/**"]
+		// },
+		{
+			"type": "chrome",
+			"request": "launch",
+			"name": "Debug Next.js Client (Chrome)",
+			"url": "http://localhost:3000",
+			"webRoot": "${workspaceFolder}",
+			"sourceMaps": true
+		}
+	]
+}
