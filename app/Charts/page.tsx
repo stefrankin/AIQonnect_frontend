@@ -1,185 +1,221 @@
-"use client";
-import React, { useRef, useState } from "react";
-import Chart from "chart.js/auto";
+'use client'; // Use the client-side runtime
+import React, { useState, useEffect, useRef } from 'react';
+import Papa from 'papaparse'; // Import PapaParse to parse CSV data
+import { Chart } from 'chart.js/auto'; // Import Chart.js for creating charts
 import axios from "axios";
 import { google } from "googleapis"; // Use Google Sheets API if needed.
+// Type definitions for form data and results
 
-const Charts = () => {
-	const [result, setResult] = useState(null);
-	const chartRef = useRef(null);
+const ArtistCampaignForm: React.FC = () => {
+	const [result, setResult] = useState<string>('');
 	const [isSubmitted, setIsSubmitted] = useState(false);
-	const [formData, setFormData] = useState({});
-
-	const handleInputChange = (e) => {
-		const { name, value, type, multiple, options } = e.target;
-		if (type === "select-multiple") {
-			const selectedValues = Array.from(options)
-				.filter((option) => option.selected)
-				.map((option) => option.value);
-			setFormData({ ...formData, [name]: selectedValues });
-		} else {
-			setFormData({ ...formData, [name]: value });
-		}
+	const [formData, setFormData] = useState<FormData>({
+	  brandName: '',
+	  ageRange: '',
+	  location: '',
+	  industries: '',
+	  audienceInterests: '',
+	  music: '',
+	  campaignGoal: '',
+	  campaignType: '',
+	  campaignBudget: '',
+	  brandFocus: '',
+	  additionalNotes: '',
+	});
+	const handleInputChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement | HTMLTextAreaElement>) => {
+	  const { name, value, type } = e.target as HTMLSelectElement | HTMLInputElement | HTMLTextAreaElement;
+	  const options = (e.target as HTMLSelectElement).options;
+	  const multiple = (e.target as HTMLSelectElement).multiple;
+	  if (type === "select-multiple") {
+		const selectedValues = Array.from(options)
+		  .filter((option) => option.selected)
+		  .map((option) => option.value);
+		setFormData((prevFormData: FormData) => ({ ...prevFormData, [name]: selectedValues }));
+	  } else {
+		setFormData((prevFormData: FormData) => ({ ...prevFormData, [name]: value }));
+	  }
 	};
-
-	function parseFollowers(followerString) {
-		if (typeof followerString !== "string")
-			return parseFloat(followerString) || 0;
-
-		// Remove 'M' or 'K' and convert to a number
-		if (followerString.endsWith("M")) {
-			return parseFloat(followerString.replace("M", "")) * 1_000_000;
-		} else if (followerString.endsWith("K")) {
-			return parseFloat(followerString.replace("K", "")) * 1_000;
-		}
-
-		// Default to parsing as a number if no suffix is present
-		return parseFloat(followerString) || 0;
+	const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+		e.preventDefault();	
 	}
 
-	const handleSubmit = async (e) => {
-		e.preventDefault();
+interface FormData {
+  brandName: string;
+  ageRange: string;
+  location: string;
+  industries: string | string[];
+  audienceInterests: string | string[];
+  music: string | string[];
+  campaignGoal: string;
+  campaignType: string | string[];
+  campaignBudget: string;
+  brandFocus: string | string[];
+  additionalNotes: string;
+}
 
-		// URL to fetch the CSV data
-		const csvURL =
-			"https://docs.google.com/spreadsheets/d/e/2PACX-1vQzjAfUp94xu3fbu0gUB8Az2TsnyqV-kbM_CMctF-1YDnE-3jtUA96yJIOwhN4qvBUBPQOKmeoq3DlY/pub?output=csv";
+interface ArtistScore {
+  name: string;
+  score: number;
+  breakdown: Record<string, number>;
+}
 
-		try {
-			// Fetch CSV data
-			const response = await axios.get(csvURL);
-			const csvData = response.data;
+interface ChartData {
+  name: string;
+  score: number;
+}
 
-			// Parse the CSV into a usable array
-			const rows = csvData
-				.split("\n")
-				.map((row) => row.split(",").map((cell) => cell.trim()));
 
-			// Assume the first row contains headers
-			const headers = rows[0];
-			const artistData = rows.slice(1);
+  const [results, setResults] = useState<string>('');
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [trendAnalysis, setTrendAnalysis] = useState<string>('');
+  const [artistData, setArtistData] = useState<any[]>([]); // State to store artist data fetched from CSV
 
-			// Process the artist data
-			const artistScores = artistData.map((artist) => {
-				const artistName = artist[0];
-				const instagramFollowersScore = parseFollowers(artist[2]);
-				const artistMusicGenre = artist[1]?.toLowerCase() || "";
+  const chartRef = useRef<HTMLCanvasElement | null>(null);
 
-				const score =
-					calculateStreamingScore(instagramFollowersScore) +
-					calculateMusicGenreMatch(artistMusicGenre, [
-						"pop",
-						"hip hop",
-					]);
+  // Fetch CSV data using the provided URL
+  useEffect(() => {
+    const fetchCSVData = async () => {
+      const csvURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQzjAfUp94xu3fbu0gUB8Az2TsnyqV-kbM_CMctF-1YDnE-3jtUA96yJIOwhN4qvBUBPQOKmeoq3DlY/pub?output=csv";
+      
+      try {
+        const response = await fetch(csvURL);
+        const csvText = await response.text();
+        
+        // Use PapaParse to parse the CSV data into JSON format
+        Papa.parse(csvText, {
+          complete: (result) => {
+            setArtistData(result.data); // Store the parsed data into state
+          },
+          header: true, // Assuming CSV has headers
+        });
+      } catch (error) {
+        console.error('Error fetching CSV data:', error);
+      }
+    };
 
-				return { name: artistName, score };
-			});
+    fetchCSVData();
+  }, []); // Run only once on mount
 
-			// Sort artists by score and get the top 3
-			const topArtists = artistScores
-				.sort((a, b) => b.score - a.score)
-				.slice(0, 3);
+  // Fetch data from the Google Script URL using useEffect
+  useEffect(() => {
+    const fetchGoogleScriptData = async () => {
+      const scriptURL = 'https://script.google.com/macros/s/AKfycbynIk4m3dHQ3Qa-q4meJx-67FX6Pt8kzw20cWravg32hcCImN8zCM8x4qysJpQ4sxhu/exec';
 
-			// Prepare data for the chart
-			const chartData = topArtists.map((artist) => ({
-				name: artist.name,
-				score: artist.score,
-			}));
+      try {
+        const response = await fetch(scriptURL);
+        const jsonData = await response.json();
 
-			let artistFinalArray = [];
+        // Check if jsonData is valid before processing
+        if (jsonData && typeof jsonData === 'object') {
+          console.log('Fetched Google Script Data:', jsonData);
+          // Process jsonData if needed
+        } else {
+          console.error('Received invalid data from Google Script:', jsonData);
+        }
+      } catch (error) {
+        console.error('Error fetching Google Script data:', error);
+      }
+    };
 
-			for (let i = 0; i < artistScores.length; i++) {
-				let artistScore = artistScores[i];
-				artistFinalArray.push({
-					name: artistScore.name,
-					score: artistScore.score,
-				});
-			}
+    fetchGoogleScriptData();
+  }, []); // Run only once on mount
 
-			const mockResponser = {
-				text: "Campaign successfully submitted!",
-				trendAnalysis:
-					"The target audience prefers Pop and Hip Hop genres.",
-				chartData: artistFinalArray,
-			};
+  // Handle form submission
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-			const mockResponse = {
-				text: "Campaign successfully submitted!",
-				trendAnalysis:
-					"The target audience prefers Pop and Hip Hop genres.",
-				chartData: [
-					{ name: "Pop", score: 85 },
-					{ name: "Hip Hop", score: 75 },
-					{ name: "Rock", score: 55 },
-					{ name: "Electronic", score: 60 },
-					{ name: "Country", score: 40 },
-				],
-			};
-			// Set form submission state
-			setIsSubmitted(true);
+    try {
+      const mockFormData: FormData = formData;
 
-			// Delay the chart rendering to ensure the canvas is available
-			setTimeout(() => {
-				updateUIWithResults(mockResponser);
-			}, 100); // A 100ms delay ensures the canvas is fully mounted
-		} catch (error) {
-			console.error("Error processing the data:", error);
-			alert("There was an error processing the data. Please try again.");
-		}
-	};
+      // Use artist data fetched earlier
+      const mockArtistData: ArtistScore[] = await processArtistData(mockFormData);
 
-	// Helper Functions
-	const calculateStreamingScore = (monthlyListeners) => {
-		if (monthlyListeners > 220000000) return 15;
-		if (monthlyListeners > 100000000) return 10;
-		if (monthlyListeners > 10000000) return 5;
-		return 0;
-	};
+      const topArtists = mockArtistData.sort((a, b) => b.score - a.score).slice(0, 3);
 
-	const calculateMusicGenreMatch = (artistMusicGenre, formDataMusic) => {
-		return formDataMusic.some((genre) =>
-			artistMusicGenre.includes(genre.toLowerCase())
-		)
-			? 20
-			: 0;
-	};
-	const updateUIWithResults = (data) => {
-		// Ensure the canvas and chartRef are properly initialized
-		if (!chartRef.current) {
-			console.error("Canvas element is not available.");
-			return;
-		}
+      const detailedResults = formatDetailedResults(topArtists);
+      const chartData = createChartData(topArtists);
+      const trendAnalysis = analyzeTrends(topArtists);
 
-		const ctx = chartRef.current.getContext("2d");
+      setResults(detailedResults);
+      setChartData(chartData);
+      setTrendAnalysis(trendAnalysis);
 
-		// Destroy the existing chart instance if it exists
-		if (window.myChart) {
-			window.myChart.destroy();
-		}
+      setIsSubmitted(true);
+    } catch (error) {
+      console.error('Error processing form submission:', error);
+      setResults('An error occurred while processing your request.');
+    }
+  };
 
-		// Create a new chart instance and store it globally
-		window.myChart = new Chart(ctx, {
-			type: "bar",
-			data: {
-				labels: data.chartData.map((item) => item.name),
-				datasets: [
-					{
-						label: "Audience Preference Scores",
-						data: data.chartData.map((item) => item.score),
-						backgroundColor: "rgba(75, 192, 192, 0.6)",
-					},
-				],
-			},
-			options: {
-				responsive: true,
-				scales: {
-					y: {
-						beginAtZero: true,
-					},
-				},
-			},
-		});
-	};
+  // Simulate artist data processing and scoring
+  const processArtistData = async (formData: FormData): Promise<ArtistScore[]> => {
+    // Using the artistData fetched from CSV (which is stored in the state)
+    return artistData.map((artist) => {
+      const score = calculateScore(artist, formData);
+      return { name: artist.name, score, breakdown: calculateBreakdown(artist, formData) };
+    });
+  };
 
+  // Simulate the calculation of an artist's score
+  const calculateScore = (artist: any, formData: FormData): number => {
+	return Object.values(artist.breakdown).reduce((acc: number, value) => {
+		return acc + (value as number);
+	}, 0);
+  };
+
+  // Simulate calculating a breakdown for each artist
+  const calculateBreakdown = (artist: any, formData: FormData): Record<string, number> => {
+    return {
+      audienceOverlap: 20,
+      brandAlignment: 15,
+      campaignFit: 10,
+      followerScore: 5,
+      engagementScore: 10,
+      compensationMatch: 10,
+      musicGenreMatch: 5,
+      streamingPopularity: 10,
+      musicCampaignFit: 5,
+    };
+  };
+
+  // Helper to format detailed results of top artists
+  const formatDetailedResults = (topArtists: ArtistScore[]): string => {
+    return topArtists
+      .map((artist, index) => {
+        return `${index + 1}. ${artist.name} (Total Score: ${artist.score.toFixed(2)})\n` +
+               `   - Audience Overlap: ${artist.breakdown.audienceOverlap} points\n` +
+               `   - Brand Alignment: ${artist.breakdown.brandAlignment} points\n` +
+               `   - Campaign Fit: ${artist.breakdown.campaignFit} points\n` +
+               `   - Followers: ${artist.breakdown.followerScore.toFixed(2)} points\n` +
+               `   - Engagement: ${artist.breakdown.engagementScore} points\n` +
+               `   - Compensation: ${artist.breakdown.compensationMatch} points\n` +
+               `   - Music Genre Match: ${artist.breakdown.musicGenreMatch} points\n` +
+               `   - Streaming Popularity: ${artist.breakdown.streamingPopularity} points\n` +
+               `   - Music Campaign Fit: ${artist.breakdown.musicCampaignFit} points`;
+      })
+      .join("\n\n");
+  };
+
+  // Helper to generate chart data
+  const createChartData = (topArtists: ArtistScore[]): ChartData[] => {
+    return topArtists.map((artist) => ({
+      name: artist.name,
+      score: artist.score,
+    }));
+  };
+
+  // Helper to simulate analyzing trends
+  const analyzeTrends = (topArtists: ArtistScore[]): string => {
+    return topArtists
+      .map((artist) => {
+        return `Trend analysis for ${artist.name}: \n` +
+               `- Follower count is increasing\n` +
+               `- Engagement rate is improving`;
+      })
+      .join("\n\n");
+  };
+
+  // Handle input changes
 	return (
 		<div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-lg">
 			<h1 className="text-2xl font-bold mb-4 text-center">
@@ -351,7 +387,7 @@ const Charts = () => {
 					<textarea
 						id="additionalNotes"
 						name="additionalNotes"
-						rows="4"
+						rows={4}
 						onChange={handleInputChange}
 						className="w-full p-2 border rounded"
 					></textarea>
@@ -376,4 +412,5 @@ const Charts = () => {
 	);
 };
 
-export default Charts;
+
+export default ArtistCampaignForm;
